@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>MommasBoy Tattoo — Bookings</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #090909;
+  --surface: #111111;
+  --surface2: #161616;
+  --border: #242424;
+  --border2: #333333;
+  --text: #e5e5e5;
+  --text-dim: #888888;
+  --text-muted: #4a4a4a;
+  --accent: #c41e3a;
+  --accent-bg: rgba(196,30,58,0.1);
+  --c-pending:    #e24b4a;
+  --c-confirmed:  #e07b28;
+  --c-session:    #27ae60;
+  --c-additional: #8e44ad;
+  --c-complete:   #2980b9;
+  --c-cancelled:  #555555;
+  --overdue-red: #ff2222;
+  --overdue-bg: rgba(255,34,34,0.07);
+  --overdue-border: rgba(255,34,34,0.45);
+}
+
+.hidden { display: none !important; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; -webkit-tap-highlight-color: transparent; }
+body { font-family: 'DM Mono', monospace; background: var(--bg); color: var(--text); overscroll-behavior: none; }
+
+/* ── PIN SCREEN ─────────────────────────────────────────── */
+.pin-screen {
+  position: fixed; inset: 0; background: var(--bg);
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; z-index: 999; gap: 28px;
+}
+.pin-logo { font-family: 'Bebas Neue', cursive; font-size: 26px; letter-spacing: 4px; text-align: center; }
+.pin-logo em { color: var(--accent); font-style: normal; }
+.pin-subtitle { font-size: 10px; color: var(--text-muted); letter-spacing: 2px; text-transform: uppercase; margin-top: -20px; }
+.pin-dots { display: flex; gap: 16px; }
+.pin-dot { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--border2); background: transparent; transition: background 0.15s, border-color 0.15s; }
+.pin-dot.filled { background: var(--accent); border-color: var(--accent); }
+.pin-error { font-size: 10px; color: var(--overdue-red); letter-spacing: 1px; text-transform: uppercase; opacity: 0; transition: opacity 0.2s; height: 16px; }
+.pin-error.show { opacity: 1; }
+.pin-pad { display: grid; grid-template-columns: repeat(3, 72px); gap: 12px; }
+.pin-key {
+  height: 72px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; font-family: 'DM Mono', monospace; font-size: 22px;
+  color: var(--text); cursor: pointer; touch-action: manipulation;
+  transition: background 0.1s, transform 0.1s;
+  display: flex; align-items: center; justify-content: center;
+}
+.pin-key:active { background: var(--surface2); transform: scale(0.94); }
+.pin-key.del { font-size: 16px; color: var(--text-dim); }
+.pin-key.empty { background: transparent; border-color: transparent; cursor: default; pointer-events: none; }
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  20%     { transform: translateX(-8px); }
+  40%     { transform: translateX(8px); }
+  60%     { transform: translateX(-5px); }
+  80%     { transform: translateX(5px); }
+}
+.pin-dots.shake { animation: shake 0.4s ease; }
+
+/* ── HEADER ─────────────────────────────────────────────── */
+.app-header {
+  height: 52px; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 16px; background: var(--surface); border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 50; gap: 10px;
+}
+.logo { font-family: 'Bebas Neue', cursive; font-size: 20px; letter-spacing: 3px; flex-shrink: 0; }
+.logo em { color: var(--accent); font-style: normal; }
+.header-actions { display: flex; gap: 8px; align-items: center; }
+
+.btn {
+  font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 1px;
+  text-transform: uppercase; padding: 8px 14px; min-height: 40px;
+  background: transparent; border: 1px solid var(--border2); color: var(--text-dim);
+  cursor: pointer; border-radius: 6px; transition: all 0.15s; touch-action: manipulation; white-space: nowrap;
+}
+.btn:hover, .btn:active { border-color: var(--text-dim); color: var(--text); }
+.btn:disabled { opacity: 0.3; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: white; }
+.btn-primary:hover, .btn-primary:active { opacity: 0.85; border-color: var(--accent); color: white; }
+
+.spin { display: inline-block; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── SETUP BANNER ───────────────────────────────────────── */
+.setup-banner {
+  background: rgba(196,30,58,0.08); border: 1px solid rgba(196,30,58,0.3);
+  border-radius: 3px; padding: 12px 16px; font-size: 11px; color: var(--text-dim);
+  line-height: 1.7; margin: 16px 16px 0;
+}
+.setup-banner strong { color: var(--accent); }
+
+/* ── BOARD ──────────────────────────────────────────────── */
+.board-wrap { display: flex; flex-direction: column; gap: 12px; padding: 16px 16px 40px; }
+.board-main { display: flex; gap: 12px; overflow-x: auto; align-items: flex-start; padding-bottom: 4px; }
+.board-main::-webkit-scrollbar { height: 5px; }
+.board-main::-webkit-scrollbar-track { background: var(--surface); }
+.board-main::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+.board-bottom { display: flex; justify-content: center; }
+.board-bottom .lane { flex: 0 0 245px; }
+
+/* ── LANE ───────────────────────────────────────────────── */
+.lane {
+  flex: 0 0 245px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; display: flex; flex-direction: column; min-height: 160px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.lane.drag-over { border-color: var(--border2); background: var(--surface2); }
+.lane-head { padding: 12px 14px 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.lane-name { font-family: 'Bebas Neue', cursive; font-size: 13px; letter-spacing: 2px; }
+.lane-count { font-size: 10px; padding: 2px 8px; border-radius: 99px; font-weight: 500; }
+
+.lane[data-css="pending"]    .lane-name { color: var(--c-pending); }
+.lane[data-css="confirmed"]  .lane-name { color: var(--c-confirmed); }
+.lane[data-css="session"]    .lane-name { color: var(--c-session); }
+.lane[data-css="additional"] .lane-name { color: var(--c-additional); }
+.lane[data-css="complete"]   .lane-name { color: var(--c-complete); }
+.lane[data-css="cancelled"]  .lane-name { color: var(--c-cancelled); }
+
+.lane[data-css="pending"]    .lane-count { background: rgba(226,75,74,0.12);  color: var(--c-pending); }
+.lane[data-css="confirmed"]  .lane-count { background: rgba(224,123,40,0.12); color: var(--c-confirmed); }
+.lane[data-css="session"]    .lane-count { background: rgba(39,174,96,0.12);  color: var(--c-session); }
+.lane[data-css="additional"] .lane-count { background: rgba(142,68,173,0.12); color: var(--c-additional); }
+.lane[data-css="complete"]   .lane-count { background: rgba(41,128,185,0.12); color: var(--c-complete); }
+.lane[data-css="cancelled"]  .lane-count { background: rgba(85,85,85,0.15);   color: var(--c-cancelled); }
+
+.lane-body { padding: 8px; display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 60px; }
+.lane-empty { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); text-align: center; padding: 24px 0; }
+
+/* ── CARD ───────────────────────────────────────────────── */
+.card {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+  padding: 12px; cursor: grab; touch-action: none; user-select: none;
+  -webkit-user-select: none; transition: border-color 0.15s;
+}
+.card.dragging { opacity: 0.3; }
+.card.overdue { border-color: var(--overdue-border) !important; background: var(--overdue-bg); }
+
+.overdue-badge {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 9px;
+  font-weight: 500; letter-spacing: 1.8px; text-transform: uppercase;
+  color: var(--overdue-red); margin-bottom: 7px; animation: blink 1.6s ease-in-out infinite;
+}
+.overdue-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--overdue-red); flex-shrink: 0; }
+@keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+
+.card-name { font-family: 'Bebas Neue', cursive; font-size: 18px; letter-spacing: 1px; line-height: 1; margin-bottom: 5px; }
+.card-service {
+  display: inline-block; font-size: 9px; text-transform: uppercase; letter-spacing: 1.2px;
+  color: var(--accent); background: var(--accent-bg); padding: 2px 8px; border-radius: 3px;
+  margin-bottom: 9px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.card-rows { display: flex; flex-direction: column; gap: 5px; }
+.card-row { display: flex; gap: 6px; align-items: baseline; }
+.card-lbl { color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; min-width: 42px; font-size: 9px; flex-shrink: 0; }
+.card-val { color: var(--text-dim); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-budget { color: #5dbf75; font-weight: 500; }
+.card-footer { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 4px; }
+.card-date { font-size: 9px; color: var(--text-muted); }
+.card-actions { display: flex; align-items: center; gap: 4px; }
+.card-detail-btn {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted);
+  background: none; border: none; cursor: pointer; font-family: 'DM Mono', monospace;
+  padding: 6px 0 6px 4px; min-height: 36px; touch-action: manipulation; transition: color 0.15s;
+}
+.card-detail-btn:hover, .card-detail-btn:active { color: var(--text); }
+.card-archive-btn {
+  font-size: 13px; color: var(--text-muted); background: none; border: none;
+  cursor: pointer; padding: 6px 4px; min-height: 36px; min-width: 28px;
+  touch-action: manipulation; transition: color 0.15s; display: flex; align-items: center; justify-content: center;
+}
+.card-archive-btn:hover, .card-archive-btn:active { color: var(--overdue-red); }
+
+/* ── DRAG GHOST ─────────────────────────────────────────── */
+.drag-ghost {
+  position: fixed; pointer-events: none; z-index: 998; opacity: 0.9;
+  transform: rotate(2deg) scale(1.04); width: 210px; background: var(--surface2);
+  border: 1px solid var(--border2); border-radius: 6px; padding: 12px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+}
+.drag-ghost-name { font-family: 'Bebas Neue', cursive; font-size: 18px; color: var(--text); margin-bottom: 4px; }
+.drag-ghost-sub  { font-size: 10px; color: var(--text-dim); }
+
+/* ── SHARED MODAL ───────────────────────────────────────── */
+.modal-bg {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.82);
+  display: flex; align-items: flex-end; justify-content: center; z-index: 200;
+}
+.modal {
+  background: var(--surface); border: 1px solid var(--border2); border-radius: 16px 16px 0 0;
+  width: 100%; max-width: 600px; max-height: 92vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+}
+.modal::-webkit-scrollbar { display: none; }
+.modal-handle { width: 36px; height: 4px; background: var(--border2); border-radius: 2px; margin: 10px auto 0; }
+.modal-header { padding: 14px 20px 12px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: flex-start; }
+.modal-title { font-family: 'Bebas Neue', cursive; font-size: 26px; letter-spacing: 2px; line-height: 1; }
+.modal-subtitle { font-size: 10px; color: var(--text-muted); margin-top: 4px; }
+.modal-close {
+  background: var(--surface2); border: none; color: var(--text-dim); cursor: pointer;
+  font-size: 16px; width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  touch-action: manipulation; flex-shrink: 0; margin-left: 12px;
+}
+.modal-body { padding: 16px 20px 48px; }
+.modal-section { margin-bottom: 18px; }
+.modal-section-lbl { font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 8px; }
+.modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.modal-field label { display: block; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 4px; }
+.modal-field p { font-size: 13px; color: var(--text); line-height: 1.5; }
+.modal-field a { color: var(--accent); text-decoration: none; font-size: 12px; }
+.consult-text { font-size: 13px; color: var(--text-dim); line-height: 1.8; white-space: pre-wrap; }
+
+.form-input, .form-textarea, .form-select {
+  width: 100%; background: var(--bg); border: 1px solid var(--border2); border-radius: 6px;
+  color: var(--text); font-family: 'DM Mono', monospace; font-size: 14px;
+  padding: 10px 12px; -webkit-appearance: none; transition: border-color 0.15s;
+}
+.form-textarea { min-height: 80px; resize: vertical; }
+.form-select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+.form-input:focus, .form-textarea:focus, .form-select:focus { outline: none; border-color: var(--text-dim); }
+.form-input::placeholder, .form-textarea::placeholder { color: var(--text-muted); }
+
+.check-group { display: flex; flex-direction: column; }
+.check-item {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  border: 1px solid var(--border2); cursor: pointer; transition: background 0.12s; touch-action: manipulation;
+}
+.check-item:first-child { border-radius: 6px 6px 0 0; }
+.check-item:last-child  { border-radius: 0 0 6px 6px; }
+.check-item + .check-item { border-top: none; }
+.check-item:active { background: var(--surface2); }
+.check-item input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); flex-shrink: 0; }
+.check-item span { font-size: 13px; color: var(--text-dim); }
+
+.modal-action-btn {
+  width: 100%; font-family: 'DM Mono', monospace; font-size: 12px; letter-spacing: 1.5px;
+  text-transform: uppercase; padding: 14px; background: var(--accent); color: white;
+  border: none; border-radius: 8px; cursor: pointer; touch-action: manipulation;
+  transition: opacity 0.15s; margin-top: 4px;
+}
+.modal-action-btn:active { opacity: 0.85; }
+.modal-action-btn:disabled { opacity: 0.4; }
+.form-error { font-size: 11px; color: var(--overdue-red); margin-top: 6px; display: none; }
+
+/* ── CONFIRM MODAL ──────────────────────────────────────── */
+.confirm-modal-bg {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 300; padding: 20px;
+}
+.confirm-modal {
+  background: var(--surface); border: 1px solid var(--border2);
+  border-radius: 12px; width: 100%; max-width: 340px; padding: 28px 24px 24px;
+  text-align: center;
+}
+.confirm-icon { font-size: 32px; margin-bottom: 14px; }
+.confirm-title {
+  font-family: 'Bebas Neue', cursive; font-size: 22px; letter-spacing: 2px;
+  color: var(--text); margin-bottom: 8px;
+}
+.confirm-msg { font-size: 12px; color: var(--text-dim); line-height: 1.7; margin-bottom: 6px; }
+.confirm-name { font-size: 13px; color: var(--text); font-weight: 500; margin-bottom: 24px; }
+.confirm-btns { display: flex; gap: 10px; }
+.confirm-btn {
+  flex: 1; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 1.5px;
+  text-transform: uppercase; padding: 12px; border-radius: 8px; cursor: pointer;
+  touch-action: manipulation; transition: opacity 0.15s; border: none;
+}
+.confirm-btn-cancel { background: var(--surface2); color: var(--text-dim); border: 1px solid var(--border2); }
+.confirm-btn-cancel:active { opacity: 0.7; }
+.confirm-btn-confirm { background: var(--overdue-red); color: white; }
+.confirm-btn-confirm:active { opacity: 0.85; }
+.confirm-btn-confirm:disabled { opacity: 0.4; }
+
+/* ── STATUS BAR ─────────────────────────────────────────── */
+.status-bar {
+  height: 34px; display: flex; align-items: center; padding: 0 16px;
+  background: var(--surface); border-top: 1px solid var(--border);
+  font-size: 10px; color: var(--text-muted); letter-spacing: 0.5px; position: sticky; bottom: 0;
+}
+
+/* ── MOBILE ─────────────────────────────────────────────── */
+@media (max-width: 700px) {
+  .board-main { flex-direction: column; overflow-x: visible; }
+  .board-main .lane, .board-bottom .lane { flex: none; width: 100%; }
+  .board-bottom { display: block; }
+  .lane { min-height: 80px; }
+  .logo { font-size: 17px; }
+}
+
+/* ── TABLET ─────────────────────────────────────────────── */
+@media (min-width: 701px) and (max-width: 1100px) {
+  .board-main { display: grid; grid-template-columns: 1fr 1fr; overflow-x: visible; }
+  .board-main .lane { flex: none; width: 100%; }
+  .board-bottom .lane { flex: 0 0 calc(50% - 6px); }
+}
+</style>
+</head>
+<body>
+
+<!-- ── PIN SCREEN ───────────────────────────────────────── -->
+<div class="pin-screen" id="pinScreen">
+  <div class="pin-logo">MOMMASBOY <em>TATTOO</em></div>
+  <div class="pin-subtitle">Enter PIN to continue</div>
+  <div class="pin-dots" id="pinDots">
+    <div class="pin-dot" id="pd0"></div>
+    <div class="pin-dot" id="pd1"></div>
+    <div class="pin-dot" id="pd2"></div>
+    <div class="pin-dot" id="pd3"></div>
+  </div>
+  <div class="pin-error" id="pinError">Incorrect PIN</div>
+  <div class="pin-pad">
+    <button class="pin-key" onclick="pinKey('1')">1</button>
+    <button class="pin-key" onclick="pinKey('2')">2</button>
+    <button class="pin-key" onclick="pinKey('3')">3</button>
+    <button class="pin-key" onclick="pinKey('4')">4</button>
+    <button class="pin-key" onclick="pinKey('5')">5</button>
+    <button class="pin-key" onclick="pinKey('6')">6</button>
+    <button class="pin-key" onclick="pinKey('7')">7</button>
+    <button class="pin-key" onclick="pinKey('8')">8</button>
+    <button class="pin-key" onclick="pinKey('9')">9</button>
+    <button class="pin-key empty"></button>
+    <button class="pin-key" onclick="pinKey('0')">0</button>
+    <button class="pin-key del" onclick="pinDel()">⌫</button>
+  </div>
+</div>
+
+<!-- ── MAIN APP ──────────────────────────────────────────── -->
+<header class="app-header">
+  <div class="logo">MOMMASBOY <em>TATTOO</em></div>
+  <div class="header-actions">
+    <button class="btn btn-primary" onclick="openAddModal()">+ Add</button>
+    <button class="btn" id="refreshBtn" onclick="loadData()">
+      <span id="refreshIcon">↺</span> Refresh
+    </button>
+  </div>
+</header>
+
+<div id="setupBanner" class="setup-banner hidden">
+  <strong>Setup required:</strong> Set <code>SCRIPT_URL</code> in the &lt;script&gt; tag to your Apps Script Web App URL.
+</div>
+
+<div class="board-wrap">
+  <div class="board-main"   id="boardMain"></div>
+  <div class="board-bottom" id="boardBottom"></div>
+</div>
+
+<!-- ── DETAIL MODAL ─────────────────────────────────────── -->
+<div class="modal-bg hidden" id="detailBg">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div>
+        <div class="modal-title"    id="detailName"></div>
+        <div class="modal-subtitle" id="detailSubmitted"></div>
+      </div>
+      <button class="modal-close" onclick="closeDetail()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-section">
+        <div class="modal-section-lbl">Contact</div>
+        <div class="modal-grid">
+          <div class="modal-field"><label>Email</label><p id="dEmail"></p></div>
+          <div class="modal-field"><label>Phone</label><p id="dPhone"></p></div>
+        </div>
+      </div>
+      <div class="modal-section">
+        <div class="modal-section-lbl">Booking</div>
+        <div class="modal-grid">
+          <div class="modal-field"><label>Services</label><p id="dServices"></p></div>
+          <div class="modal-field"><label>Budget</label><p id="dBudget" style="color:#5dbf75;font-weight:500"></p></div>
+        </div>
+      </div>
+      <div class="modal-section">
+        <div class="modal-section-lbl">Consult Notes</div>
+        <p class="consult-text" id="dDetails"></p>
+      </div>
+      <div class="modal-section" id="dFileSection">
+        <div class="modal-section-lbl">Reference Images</div>
+        <div class="modal-field"><a id="dFileLink" target="_blank" rel="noopener">View uploaded file ↗</a></div>
+      </div>
+      <div class="modal-section">
+        <div class="modal-section-lbl">Session Date</div>
+        <input class="form-input" type="date" id="dSessionDate" />
+      </div>
+      <div class="modal-section">
+        <div class="modal-section-lbl">Johny's Notes</div>
+        <textarea class="form-textarea" id="dNotes" placeholder="Private notes visible only on this board…"></textarea>
+      </div>
+      <button class="modal-action-btn" id="detailSaveBtn" onclick="saveDetail()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── ADD BOOKING MODAL ─────────────────────────────────── -->
+<div class="modal-bg hidden" id="addBg">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">New Booking</div>
+        <div class="modal-subtitle">Manually add a client to the board</div>
+      </div>
+      <button class="modal-close" onclick="closeAdd()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-section">
+        <div class="modal-section-lbl">Name <span style="color:var(--accent)">*</span></div>
+        <div class="modal-grid">
+          <input class="form-input" type="text" id="aFirstName" placeholder="First name" autocomplete="given-name" />
+          <input class="form-input" type="text" id="aLastName"  placeholder="Last name"  autocomplete="family-name" />
+        </div>
+        <div class="form-error" id="errName">Please enter at least a first name.</div>
+      </div>
+      <div class="modal-section">
+        <div class="modal-section-lbl">Contact</div>
+        <div class="modal-grid">
+          <input class="form-input" type="email" id="aEmail" placeholder="Email" autocomplete="email" />
+          <input class="form-input" type="tel"   id="aPhone" placeholder="Phone" autocomplete="tel" />
+        </div>
+      </div>
+      <div class="modal-section">
+        <div class="modal-section-lbl">Services</div>
+        <div class="check-group">
+          <label class="check-item"><input type="checkbox" value="Fine Line" /><span>Fine Line</span></label>
+          <label class="check-item"><input type="checkbox" value="Custom Lettering" /><span>Custom Lettering</span></label>
+          <label class="check-item"><input type="checkbox" value="Black and Grey" /><span>Black and Grey</span></label>
+          <label class="check-item"><input type="checkbox" value="Blackwork" /><span>Blackwork</span></label>
+          <label class="check-item"><input type="checkbox" value="Realism" /><span>Realism</span></label>
+          <label class="check-item"><input type="checkbox" value="Other" /><span>Other</span></label>
+        </div>
+      </div>
+      <div class="modal-section">
+        <div class="modal-section-lbl">Budget</div>
+        <select class="form-select" id="aBudget">
+          <option value="">— Select budget —</option>
+          <option value="$500 - $1,000">$500 – $1,000</option>
+          <option value="$1,000 - $1,500">$1,000 – $1,500</option>
+          <option value="$1,500+">$1,500+</option>
+        </select>
+      </div>
+      <div class="modal-section">
+        <div class="modal-section-lbl">Consult Details</div>
+        <textarea class="form-textarea" id="aDetails" placeholder="Describe the tattoo, placement, style references…"></textarea>
+      </div>
+      <div class="modal-section">
+        <div class="modal-section-lbl">Add to lane</div>
+        <select class="form-select" id="aLane">
+          <option value="Pending Response">Pending Response</option>
+          <option value="Book Date Confirmed">Book Date Confirmed</option>
+          <option value="In Session">In Session</option>
+          <option value="Requires Additional Session">Additional Session</option>
+          <option value="Complete">Complete</option>
+          <option value="Cancelled">Cancelled</option>
+        </select>
+      </div>
+      <button class="modal-action-btn" id="addSubmitBtn" onclick="submitAdd()">Add to Board</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── CONFIRM ARCHIVE MODAL ─────────────────────────────── -->
+<div class="confirm-modal-bg hidden" id="confirmBg">
+  <div class="confirm-modal">
+    <div class="confirm-icon">🗄️</div>
+    <div class="confirm-title">Archive Session?</div>
+    <div class="confirm-msg">Are you sure you want to archive this session?</div>
+    <div class="confirm-name" id="confirmName"></div>
+    <div class="confirm-btns">
+      <button class="confirm-btn confirm-btn-cancel" onclick="closeConfirm()">Cancel</button>
+      <button class="confirm-btn confirm-btn-confirm" id="confirmBtn" onclick="confirmArchive()">Archive</button>
+    </div>
+  </div>
+</div>
+
+<div class="status-bar" id="statusBar">Initializing…</div>
+
+<script>
+// ── CONFIG ────────────────────────────────────────────────
+const CORRECT_PIN   = '3141';
+const SCRIPT_URL    = 'https://script.google.com/macros/s/AKfycbyOu-IiZSeD13wXVuPP_cyEjVrXr1gfLer5HmJHg4rBENXsbuijrObWmQOexR6hRJOZww/exec';
+const OVERDUE_HOURS = 47;
+// ─────────────────────────────────────────────────────────
+
+const LANES = [
+  { id: 'Pending Response',            label: 'Pending Response',    css: 'pending' },
+  { id: 'Book Date Confirmed',         label: 'Book Date Confirmed', css: 'confirmed' },
+  { id: 'In Session',                  label: 'In Session',          css: 'session' },
+  { id: 'Requires Additional Session', label: 'Additional Session',  css: 'additional' },
+  { id: 'Complete',                    label: 'Complete',            css: 'complete' },
+  { id: 'Cancelled',                   label: 'Cancelled',           css: 'cancelled' },
+];
+
+let rows = [];
+let activeRowIndex = null;
+let pendingArchiveIndex = null;
+let touchDragRowIndex = null;
+let ghostEl = null;
+let touchOffX = 0, touchOffY = 0;
+
+function setStatus(msg) { document.getElementById('statusBar').textContent = msg; }
+function $(id) { return document.getElementById(id); }
+
+/* ── PIN ─────────────────────────────────────────────────── */
+let pinEntry = '';
+function pinKey(digit) {
+  if (pinEntry.length >= 4) return;
+  pinEntry += digit;
+  updatePinDots();
+  if (pinEntry.length === 4) checkPin();
+}
+function pinDel() {
+  pinEntry = pinEntry.slice(0, -1);
+  updatePinDots();
+  $('pinError').classList.remove('show');
+}
+function updatePinDots() {
+  for (let i = 0; i < 4; i++) $('pd' + i).classList.toggle('filled', i < pinEntry.length);
+}
+function checkPin() {
+  if (pinEntry === CORRECT_PIN) {
+    sessionStorage.setItem('mbt_auth', '1');
+    $('pinScreen').classList.add('hidden');
+    loadData();
+  } else {
+    $('pinDots').classList.add('shake');
+    $('pinError').classList.add('show');
+    setTimeout(() => { pinEntry = ''; updatePinDots(); $('pinDots').classList.remove('shake'); }, 600);
+  }
+}
+
+/* ── OVERDUE ────────────────────────────────────────────── */
+function isOverdue(row) {
+  if ((row['Status'] || 'Pending Response') !== 'Pending Response') return false;
+  if (!row['Timestamp']) return false;
+  return (new Date() - new Date(row['Timestamp'])) / 3600000 >= OVERDUE_HOURS;
+}
+
+/* ── LOAD DATA ──────────────────────────────────────────── */
+async function loadData() {
+  if (SCRIPT_URL === 'YOUR_APPS_SCRIPT_URL_HERE') {
+    $('setupBanner').classList.remove('hidden');
+    setStatus('Not configured'); renderBoard(); return;
+  }
+  const btn = $('refreshBtn'), icon = $('refreshIcon');
+  btn.disabled = true; icon.classList.add('spin');
+  setStatus('Fetching from Google Sheets…');
+  try {
+    const res = await fetch(SCRIPT_URL + '?t=' + Date.now());
+    rows = await res.json();
+    rows.forEach(r => { if (!r['Status']) r['Status'] = 'Pending Response'; });
+    renderBoard();
+    const total = rows.length, overdue = rows.filter(isOverdue).length;
+    let msg = `${total} booking${total !== 1 ? 's' : ''} loaded · ${new Date().toLocaleTimeString()}`;
+    if (overdue > 0) msg += ` · ⚠ ${overdue} overdue`;
+    setStatus(msg);
+  } catch(e) { setStatus('Failed to load: ' + e.message); }
+  btn.disabled = false; icon.classList.remove('spin');
+}
+
+/* ── RENDER ─────────────────────────────────────────────── */
+function renderBoard() {
+  $('boardMain').innerHTML = '';
+  $('boardBottom').innerHTML = '';
+  for (const lane of LANES) {
+    const target   = lane.id === 'Cancelled' ? $('boardBottom') : $('boardMain');
+    const laneRows = rows.filter(r => (r['Status'] || 'Pending Response') === lane.id);
+    const col = document.createElement('div');
+    col.className = 'lane'; col.dataset.css = lane.css; col.dataset.lane = lane.id;
+    col.innerHTML = `
+      <div class="lane-head">
+        <span class="lane-name">${lane.label}</span>
+        <span class="lane-count">${laneRows.length}</span>
+      </div>
+      <div class="lane-body" data-lane="${lane.id}">
+        ${laneRows.length === 0 ? '<div class="lane-empty">Drop here</div>' : ''}
+      </div>`;
+    const body = col.querySelector('.lane-body');
+    for (const row of laneRows) body.appendChild(makeCard(row));
+    body.addEventListener('dragover',  e => { e.preventDefault(); col.classList.add('drag-over'); });
+    body.addEventListener('dragleave', ()  => col.classList.remove('drag-over'));
+    body.addEventListener('drop', async e => {
+      e.preventDefault(); col.classList.remove('drag-over');
+      if (window._dragIdx != null) { await moveTo(window._dragIdx, lane.id); window._dragIdx = null; }
+    });
+    target.appendChild(col);
+  }
+}
+
+/* ── MAKE CARD ──────────────────────────────────────────── */
+function makeCard(row) {
+  const el = document.createElement('div');
+  const overdue = isOverdue(row);
+  el.className = 'card' + (overdue ? ' overdue' : '');
+  el.draggable = true;
+  const name    = ((row['First Name'] || '') + ' ' + (row['Last Name'] || '')).trim() || 'Unknown';
+  const dateStr = row['Timestamp']
+    ? new Date(row['Timestamp']).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    : '';
+  el.innerHTML = `
+    ${overdue ? `<div class="overdue-badge"><span class="overdue-dot"></span>Requires Response</div>` : ''}
+    <div class="card-name">${name}</div>
+    ${row['Services'] ? `<span class="card-service">${row['Services']}</span>` : ''}
+    <div class="card-rows">
+      <div class="card-row"><span class="card-lbl">Email</span><span class="card-val">${row['Email'] || '—'}</span></div>
+      <div class="card-row"><span class="card-lbl">Phone</span><span class="card-val">${row['Phone'] || '—'}</span></div>
+      <div class="card-row"><span class="card-lbl">Budget</span><span class="card-val card-budget">${row['Budget'] || '—'}</span></div>
+    </div>
+    <div class="card-footer">
+      <span class="card-date">${dateStr}</span>
+      <div class="card-actions">
+        <button class="card-archive-btn" title="Archive">🗄</button>
+        <button class="card-detail-btn">Details →</button>
+      </div>
+    </div>`;
+
+  el.querySelector('.card-detail-btn').addEventListener('click',    e => { e.stopPropagation(); openDetail(row.rowIndex); });
+  el.querySelector('.card-detail-btn').addEventListener('touchend', e => e.stopPropagation());
+  el.querySelector('.card-archive-btn').addEventListener('click',   e => { e.stopPropagation(); openConfirm(row.rowIndex, name); });
+  el.querySelector('.card-archive-btn').addEventListener('touchend', e => e.stopPropagation());
+
+  el.addEventListener('dragstart', () => { window._dragIdx = row.rowIndex; setTimeout(() => el.classList.add('dragging'), 0); });
+  el.addEventListener('dragend',   () => el.classList.remove('dragging'));
+  el.addEventListener('touchstart', e => startTouch(e, row, el), { passive: false });
+  return el;
+}
+
+/* ── CONFIRM ARCHIVE ────────────────────────────────────── */
+function openConfirm(rowIndex, name) {
+  pendingArchiveIndex = rowIndex;
+  $('confirmName').textContent = name;
+  $('confirmBtn').disabled = false;
+  $('confirmBtn').textContent = 'Archive';
+  $('confirmBg').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+function closeConfirm() {
+  $('confirmBg').classList.add('hidden');
+  document.body.style.overflow = '';
+  pendingArchiveIndex = null;
+}
+async function confirmArchive() {
+  if (pendingArchiveIndex === null) return;
+  const btn = $('confirmBtn');
+  btn.disabled = true; btn.textContent = 'Archiving…';
+  try {
+    await archiveRow(pendingArchiveIndex);
+    rows = rows.filter(r => r.rowIndex !== pendingArchiveIndex);
+    renderBoard();
+    closeConfirm();
+    setStatus('Session archived successfully');
+  } catch(e) {
+    btn.disabled = false; btn.textContent = 'Archive';
+    setStatus('Archive failed: ' + e.message);
+  }
+}
+
+/* ── TOUCH DRAG ─────────────────────────────────────────── */
+function startTouch(e, row, el) {
+  if (e.target.classList.contains('card-detail-btn') ||
+      e.target.classList.contains('card-archive-btn')) return;
+  const t = e.touches[0], r = el.getBoundingClientRect();
+  touchOffX = t.clientX - r.left; touchOffY = t.clientY - r.top;
+  touchDragRowIndex = row.rowIndex;
+  ghostEl = document.createElement('div');
+  ghostEl.className = 'drag-ghost';
+  const name = ((row['First Name'] || '') + ' ' + (row['Last Name'] || '')).trim();
+  ghostEl.innerHTML = `<div class="drag-ghost-name">${name}</div><div class="drag-ghost-sub">${row['Services'] || ''}</div>`;
+  ghostEl.style.left = (t.clientX - touchOffX) + 'px';
+  ghostEl.style.top  = (t.clientY - touchOffY) + 'px';
+  document.body.appendChild(ghostEl);
+  el.classList.add('dragging');
+  document.addEventListener('touchmove', onTouchMove, { passive: false });
+  document.addEventListener('touchend',  onTouchEnd);
+}
+function onTouchMove(e) {
+  e.preventDefault();
+  if (!ghostEl) return;
+  const t = e.touches[0];
+  ghostEl.style.left = (t.clientX - touchOffX) + 'px';
+  ghostEl.style.top  = (t.clientY - touchOffY) + 'px';
+  ghostEl.style.display = 'none';
+  const under = document.elementFromPoint(t.clientX, t.clientY);
+  ghostEl.style.display = '';
+  document.querySelectorAll('.lane').forEach(l => l.classList.remove('drag-over'));
+  const laneEl = under && under.closest('.lane');
+  if (laneEl) laneEl.classList.add('drag-over');
+}
+async function onTouchEnd(e) {
+  document.removeEventListener('touchmove', onTouchMove);
+  document.removeEventListener('touchend',  onTouchEnd);
+  if (ghostEl) { ghostEl.remove(); ghostEl = null; }
+  document.querySelectorAll('.lane').forEach(l => l.classList.remove('drag-over'));
+  document.querySelectorAll('.card.dragging').forEach(c => c.classList.remove('dragging'));
+  if (touchDragRowIndex == null) return;
+  const t = e.changedTouches[0];
+  const under  = document.elementFromPoint(t.clientX, t.clientY);
+  const laneEl = under && under.closest('.lane');
+  if (laneEl && laneEl.dataset.lane) await moveTo(touchDragRowIndex, laneEl.dataset.lane);
+  touchDragRowIndex = null;
+}
+
+/* ── MOVE ───────────────────────────────────────────────── */
+async function moveTo(rowIndex, laneId) {
+  const row = rows.find(r => r.rowIndex === rowIndex);
+  if (!row || row['Status'] === laneId) return;
+  row['Status'] = laneId; renderBoard();
+  await updateSheet(rowIndex, { 'Status': laneId });
+}
+
+/* ── DETAIL MODAL ───────────────────────────────────────── */
+function openDetail(rowIndex) {
+  const row = rows.find(r => r.rowIndex === rowIndex);
+  if (!row) return;
+  activeRowIndex = rowIndex;
+  $('detailName').textContent      = ((row['First Name'] || '') + ' ' + (row['Last Name'] || '')).trim();
+  $('detailSubmitted').textContent = row['Timestamp']
+    ? 'Submitted ' + new Date(row['Timestamp']).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+    : 'Added manually';
+  $('dEmail').textContent    = row['Email']   || '—';
+  $('dPhone').textContent    = row['Phone']   || '—';
+  $('dServices').textContent = row['Services'] || '—';
+  $('dBudget').textContent   = row['Budget']  || '—';
+  $('dDetails').textContent  = row['Consult Details'] || '—';
+  const fileUrl = row['File Upload URL'];
+  $('dFileSection').style.display = (fileUrl && fileUrl.trim()) ? 'block' : 'none';
+  if (fileUrl) $('dFileLink').href = fileUrl;
+  $('dSessionDate').value = row['Session Date'] || '';
+  $('dNotes').value       = row['Notes']        || '';
+  $('detailSaveBtn').textContent = 'Save Changes';
+  $('detailSaveBtn').disabled = false;
+  $('detailBg').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+function closeDetail() {
+  $('detailBg').classList.add('hidden');
+  document.body.style.overflow = '';
+  activeRowIndex = null;
+}
+$('detailBg').addEventListener('click', e => { if (e.target === $('detailBg')) closeDetail(); });
+
+async function saveDetail() {
+  if (activeRowIndex === null) return;
+  const btn = $('detailSaveBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  const sessionDate = $('dSessionDate').value;
+  const notes       = $('dNotes').value;
+  const row = rows.find(r => r.rowIndex === activeRowIndex);
+  if (row) { row['Session Date'] = sessionDate; row['Notes'] = notes; }
+  await updateSheet(activeRowIndex, { 'Session Date': sessionDate, 'Notes': notes });
+  btn.disabled = false; btn.textContent = 'Saved ✓';
+  setTimeout(() => { btn.textContent = 'Save Changes'; }, 2500);
+}
+
+/* ── ADD MODAL ──────────────────────────────────────────── */
+function openAddModal() {
+  $('aFirstName').value = ''; $('aLastName').value = '';
+  $('aEmail').value = ''; $('aPhone').value = '';
+  $('aDetails').value = ''; $('aBudget').value = '';
+  $('aLane').value = 'Pending Response';
+  $('errName').style.display = 'none';
+  document.querySelectorAll('#addBg input[type="checkbox"]').forEach(cb => cb.checked = false);
+  $('addSubmitBtn').textContent = 'Add to Board';
+  $('addSubmitBtn').disabled = false;
+  $('addBg').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => $('aFirstName').focus(), 300);
+}
+function closeAdd() {
+  $('addBg').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+$('addBg').addEventListener('click', e => { if (e.target === $('addBg')) closeAdd(); });
+
+async function submitAdd() {
+  const firstName = $('aFirstName').value.trim();
+  if (!firstName) { $('errName').style.display = 'block'; $('aFirstName').focus(); return; }
+  $('errName').style.display = 'none';
+  const services = [...document.querySelectorAll('#addBg input[type="checkbox"]:checked')].map(cb => cb.value).join(', ');
+  const newRow = {
+    'Timestamp': new Date().toISOString(), 'First Name': firstName,
+    'Last Name': $('aLastName').value.trim(), 'Email': $('aEmail').value.trim(),
+    'Phone': $('aPhone').value.trim(), 'Services': services,
+    'Budget': $('aBudget').value, 'Consult Details': $('aDetails').value.trim(),
+    'File Upload URL': '', 'Status': $('aLane').value, 'Session Date': '', 'Notes': '',
+  };
+  const btn = $('addSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Adding…';
+  try {
+    await appendRow(newRow);
+    rows.push({ ...newRow, rowIndex: Date.now() });
+    renderBoard(); closeAdd();
+    setStatus(`${firstName} added · Refresh to sync`);
+  } catch(e) {
+    btn.disabled = false; btn.textContent = 'Add to Board';
+    setStatus('Failed to add: ' + e.message);
+  }
+}
+
+/* ── SHEET OPS ──────────────────────────────────────────── */
+async function updateSheet(rowIndex, updates) {
+  if (SCRIPT_URL === 'YOUR_APPS_SCRIPT_URL_HERE') return;
+  try {
+    await fetch(SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ rowIndex, updates }) });
+  } catch(e) { console.error('Update failed:', e); }
+}
+async function appendRow(newRow) {
+  if (SCRIPT_URL === 'YOUR_APPS_SCRIPT_URL_HERE') return;
+  const res = await fetch(SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ newRow }) });
+  if (!res.ok) throw new Error('Server error ' + res.status);
+}
+async function archiveRow(rowIndex) {
+  if (SCRIPT_URL === 'YOUR_APPS_SCRIPT_URL_HERE') return;
+  const res = await fetch(SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ archiveRow: rowIndex }) });
+  if (!res.ok) throw new Error('Server error ' + res.status);
+}
+
+/* ── INIT ───────────────────────────────────────────────── */
+if (sessionStorage.getItem('mbt_auth') === '1') {
+  $('pinScreen').classList.add('hidden');
+  loadData();
+} else {
+  setStatus('Enter PIN to access the board');
+}
+</script>
+</body>
+</html>
