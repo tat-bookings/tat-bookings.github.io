@@ -75,6 +75,19 @@
 .tl-card.status-additional{border-left-color:var(--c-additional)}.tl-card.status-additional .tl-card-time{color:var(--c-additional)}
 .tl-card.status-complete{border-left-color:var(--c-complete)}.tl-card.status-complete .tl-card-time{color:var(--c-complete)}
 .tl-card.status-cancelled{border-left-color:var(--c-cancelled)}.tl-card.status-cancelled .tl-card-time{color:var(--c-cancelled)}
+
+/* ── LANE MOVE CONFIRM ──────────────────────────────────── */
+.lane-confirm-bg{position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:500;padding:24px}
+.lane-confirm{background:var(--surface);border:1px solid var(--border2);border-radius:16px;width:100%;max-width:360px;padding:28px 24px 24px;text-align:center}
+.lane-confirm-icon{font-size:30px;margin-bottom:12px}
+.lane-confirm-msg{font-size:13px;color:var(--text);line-height:1.8;margin-bottom:24px}
+.lane-confirm-msg strong{color:var(--c-confirmed)}
+.lane-confirm-btns{display:flex;gap:12px}
+.lane-confirm-btn{flex:1;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;padding:14px;border-radius:10px;cursor:pointer;touch-action:manipulation;border:none}
+.lane-confirm-cancel{background:var(--surface3);color:var(--text-dim);border:1px solid var(--border2)}
+.lane-confirm-cancel:active{opacity:.7}
+.lane-confirm-ok{background:var(--accent);color:white}
+.lane-confirm-ok:active{opacity:.85}
 </style>
 </head>
 <body>
@@ -278,7 +291,35 @@ function onTouchMove(e){e.preventDefault();if(!ghostEl)return;const t=e.touches[
 async function onTouchEnd(e){document.removeEventListener('touchmove',onTouchMove);document.removeEventListener('touchend',onTouchEnd);if(ghostEl){ghostEl.remove();ghostEl=null;}document.querySelectorAll('.lane').forEach(l=>l.classList.remove('drag-over'));document.querySelectorAll('.card.dragging').forEach(c=>c.classList.remove('dragging'));if(touchDragRowIndex==null)return;const t=e.changedTouches[0];const under=document.elementFromPoint(t.clientX,t.clientY);const laneEl=under&&under.closest('.lane');if(laneEl&&laneEl.dataset.lane)await moveTo(touchDragRowIndex,laneEl.dataset.lane);touchDragRowIndex=null;}
 
 // MOVE
-async function moveTo(rowIndex,laneId){const row=rows.find(r=>r.rowIndex===rowIndex);if(!row||row['Status']===laneId)return;row['Status']=laneId;renderBoard();await postToScript({rowIndex,updates:{'Status':laneId}});}
+
+let _pendingMove = null;
+function moveTo(rowIndex, laneId){
+  const row = rows.find(r => r.rowIndex === rowIndex);
+  if(!row || row['Status'] === laneId) return;
+  const firstName = row['First Name'] || '';
+  const lastName  = row['Last Name']  || '';
+  const fullName  = (firstName + ' ' + lastName).trim() || 'this client';
+  const laneLabel = LANES.find(l => l.id === laneId)?.label || laneId;
+  _pendingMove = { rowIndex, laneId };
+  document.getElementById('laneConfirmMsg').innerHTML =
+    'Move <strong>' + fullName + '</strong><br>to <strong>' + laneLabel + '</strong>?';
+  document.getElementById('laneConfirmBg').classList.remove('hidden');
+}
+function cancelLaneMove(){
+  document.getElementById('laneConfirmBg').classList.add('hidden');
+  _pendingMove = null;
+  renderBoard(); // restore original position visually
+}
+async function confirmLaneMove(){
+  if(!_pendingMove) return;
+  const { rowIndex, laneId } = _pendingMove;
+  _pendingMove = null;
+  document.getElementById('laneConfirmBg').classList.add('hidden');
+  const row = rows.find(r => r.rowIndex === rowIndex);
+  if(row){ row['Status'] = laneId; renderBoard(); }
+  await postToScript({ rowIndex, updates: { 'Status': laneId } });
+}
+
 
 // DETAIL MODAL
 function openDetail(rowIndex){
@@ -656,5 +697,17 @@ document.getElementById('dayPanelBg').addEventListener('click',e=>{
     Calendar
   </button>
 </nav>
+
+<!-- LANE MOVE CONFIRM -->
+<div class="lane-confirm-bg hidden" id="laneConfirmBg">
+  <div class="lane-confirm">
+    <div class="lane-confirm-icon">&#8645;</div>
+    <div class="lane-confirm-msg" id="laneConfirmMsg"></div>
+    <div class="lane-confirm-btns">
+      <button class="lane-confirm-btn lane-confirm-cancel" onclick="cancelLaneMove()">Cancel</button>
+      <button class="lane-confirm-btn lane-confirm-ok" onclick="confirmLaneMove()">Move</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
