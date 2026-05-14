@@ -88,6 +88,15 @@
 .lane-confirm-cancel:active{opacity:.7}
 .lane-confirm-ok{background:var(--accent);color:white}
 .lane-confirm-ok:active{opacity:.85}
+
+.attach-bar{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+.attach-btn-label{display:inline-flex;align-items:center;gap:6px;background:var(--surface3);border:1px solid var(--border2);color:var(--text-dim);font-family:'DM Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;padding:8px 14px;border-radius:8px;cursor:pointer;touch-action:manipulation;transition:background .15s}
+.attach-btn-label:hover{background:var(--border2);color:var(--text)}
+.attach-previews{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.attach-preview{display:inline-flex;align-items:center;gap:6px;background:var(--surface3);border:1px solid var(--border2);border-radius:8px;padding:5px 10px;font-size:10px;color:var(--text-dim)}
+.attach-preview-thumb{width:28px;height:28px;object-fit:cover;border-radius:4px}
+.attach-preview-name{max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.attach-remove{background:none;border:none;color:var(--overdue-red);cursor:pointer;font-size:13px;padding:0 0 0 4px;line-height:1;touch-action:manipulation}
 </style>
 </head>
 <body>
@@ -146,6 +155,14 @@
       <div class="modal-section">
         <div class="modal-section-lbl" id="replyLbl">Reply to Client</div>
         <textarea class="form-textarea" id="replyBody" placeholder="Type your reply here..." style="min-height:110px;"></textarea>
+        <div class="attach-previews" id="attachPreviews"></div>
+        <div class="attach-bar">
+          <label class="attach-btn-label">
+            &#128206; Attach Photo
+            <input type="file" id="replyFileInput" accept="image/*,application/pdf" multiple style="display:none;" onchange="handleAttachSelect(this)">
+          </label>
+          <span id="attachCount" style="font-size:10px;color:var(--text-muted);display:none;"></span>
+        </div>
         <p class="reply-hint">Sends directly from Mommasboy Tattoo. Reply will appear in the chat above.</p>
       </div>
       <button class="modal-action-btn-secondary" id="replyBtn" onclick="sendReply()">Reply to Client</button>
@@ -349,7 +366,7 @@ function openDetail(rowIndex){
   $('detailBg').classList.remove('hidden');document.body.style.overflow='hidden';
   loadThread();
 }
-function closeDetail(){$('detailBg').classList.add('hidden');document.body.style.overflow='';activeRowIndex=null;}
+function closeDetail(){$('detailBg').classList.add('hidden');document.body.style.overflow='';activeRowIndex=null;clearAttachments();}
 $('detailBg').addEventListener('click',e=>{if(e.target===$('detailBg'))closeDetail();});
 
 async function saveDetail(){
@@ -401,6 +418,46 @@ function renderThread(msgs,clientName){
   wrap.scrollTop=wrap.scrollHeight;
 }
 
+// ATTACHMENTS
+let pendingAttachments=[];
+function handleAttachSelect(input){
+  Array.from(input.files).forEach(file=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      pendingAttachments.push({
+        name:file.name,
+        mimeType:file.type||'application/octet-stream',
+        data:e.target.result.split(',')[1],
+        preview:file.type.startsWith('image/')?e.target.result:null
+      });
+      renderAttachPreviews();
+    };
+    reader.readAsDataURL(file);
+  });
+  input.value='';
+}
+function renderAttachPreviews(){
+  const container=$('attachPreviews');
+  const countEl=$('attachCount');
+  container.innerHTML='';
+  if(pendingAttachments.length===0){countEl.style.display='none';return;}
+  countEl.style.display='inline';
+  countEl.textContent=pendingAttachments.length+' file'+(pendingAttachments.length>1?'s':'')+' attached';
+  pendingAttachments.forEach((att,i)=>{
+    const wrap=document.createElement('div');wrap.className='attach-preview';
+    if(att.preview){const img=document.createElement('img');img.className='attach-preview-thumb';img.src=att.preview;wrap.appendChild(img);}
+    const name=document.createElement('span');name.className='attach-preview-name';name.textContent=att.name;wrap.appendChild(name);
+    const rm=document.createElement('button');rm.className='attach-remove';rm.innerHTML='&#10005;';
+    rm.onclick=()=>{pendingAttachments.splice(i,1);renderAttachPreviews();};
+    wrap.appendChild(rm);container.appendChild(wrap);
+  });
+}
+function clearAttachments(){
+  pendingAttachments=[];
+  $('attachPreviews').innerHTML='';
+  $('attachCount').style.display='none';
+}
+
 // REPLY — silent send via Apps Script
 async function sendReply(){
   if(activeRowIndex===null)return;
@@ -416,8 +473,8 @@ async function sendReply(){
     $('replyBody').value='';
     btn.textContent='Sent!';
     setTimeout(()=>{btn.textContent='Reply to '+firstName;btn.disabled=false;},2500);
+    // Reload thread after a moment to show new message
     setTimeout(()=>loadThread(),2000);
-    setTimeout(()=>loadData(),3000);
   }catch(e){
     btn.disabled=false;btn.textContent='Reply to '+firstName;
     setStatus('Send failed: '+e.message);
