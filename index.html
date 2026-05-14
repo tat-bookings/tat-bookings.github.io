@@ -469,12 +469,15 @@ async function sendReply(){
   const btn=$('replyBtn');
   btn.disabled=true;btn.textContent='Sending...';
   try{
-    await postToScript({sendReply:{to:row['Email'],body}});
+    const payload={sendReply:{to:row['Email'],body}};
+    if(pendingAttachments.length>0) payload.sendReply.attachments=pendingAttachments;
+    await postToScript(payload);
     $('replyBody').value='';
+    clearAttachments();
     btn.textContent='Sent!';
     setTimeout(()=>{btn.textContent='Reply to '+firstName;btn.disabled=false;},2500);
-    // Reload thread after a moment to show new message
     setTimeout(()=>loadThread(),2000);
+    setTimeout(()=>loadData(),3000);
   }catch(e){
     btn.disabled=false;btn.textContent='Reply to '+firstName;
     setStatus('Send failed: '+e.message);
