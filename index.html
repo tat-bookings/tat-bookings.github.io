@@ -416,8 +416,8 @@ async function sendReply(){
     $('replyBody').value='';
     btn.textContent='Sent!';
     setTimeout(()=>{btn.textContent='Reply to '+firstName;btn.disabled=false;},2500);
-    // Reload thread after a moment to show new message
     setTimeout(()=>loadThread(),2000);
+    setTimeout(()=>loadData(),3000);
   }catch(e){
     btn.disabled=false;btn.textContent='Reply to '+firstName;
     setStatus('Send failed: '+e.message);
